@@ -1,0 +1,6 @@
+duckdb 
+fsspec
+gcsfs
+fastapi
+uvicorn
+
