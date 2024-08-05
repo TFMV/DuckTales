@@ -1,6 +1,6 @@
-duckdb 
-fsspec
-gcsfs
 fastapi
 uvicorn
-
+duckdb
+pydantic
+adbc_driver_postgresql
+pyarrow
