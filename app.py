@@ -30,6 +30,10 @@ class TableMigrationRequest(BaseModel):
     target: DatabaseConfig
     table_name: str
 
+class ExportParquetRequest(BaseModel):
+    config: DatabaseConfig
+    target_directory: str
+
 def get_pg_uri(db_config: DatabaseConfig) -> str:
     return f"postgresql://{db_config.user}:{db_config.password}@" \
            f"{db_config.host}:{db_config.port}/{db_config.database}"

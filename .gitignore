@@ -166,3 +166,4 @@ cython_debug/
 .venv/
 
 payload.json
+data/
