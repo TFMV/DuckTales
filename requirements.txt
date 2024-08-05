@@ -3,4 +3,5 @@ uvicorn
 duckdb
 pydantic
 adbc_driver_postgresql
+adbc_driver_duckdb
 pyarrow
