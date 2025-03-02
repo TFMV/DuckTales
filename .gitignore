@@ -167,3 +167,8 @@ cython_debug/
 
 payload.json
 data/
+cli/
+
+test.db
+
+etc/
