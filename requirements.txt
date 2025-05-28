@@ -1,5 +1,0 @@
-duckdb
-adbc_driver_manager
-pyarrow
-numpy
-pandas
