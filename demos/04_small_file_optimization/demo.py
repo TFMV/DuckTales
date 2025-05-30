@@ -47,49 +47,103 @@ def simulate_traditional_format(base_path, num_updates=100):
 
     print(f"📁 Traditional format directory: {trad_path}")
 
-    # Simulate initial data file
+    # Simulate initial data file with more realistic parquet overhead
     with open(os.path.join(data_path, "data-00000.parquet"), "w") as f:
-        f.write("PARQUET" * 200)  # Simulate 1.4KB parquet file
+        # Simulate a more realistic parquet file with headers, metadata, and row groups
+        f.write("PAR1" * 100)  # File header
+        f.write("META" * 100)  # File metadata
+        f.write("DATA" * 200)  # Row group 1
+        f.write("DICT" * 50)  # Dictionary encoding
+        f.write("PAR1" * 100)  # File footer
 
-    # Simulate metadata files for initial state
+    # Simulate metadata files for initial state with realistic JSON content
     with open(os.path.join(snapshot_path, "snapshot-v0.json"), "w") as f:
-        f.write(
-            '{"version": 0, "timestamp": "2024-01-01", "manifest_list": "manifest-list-0.json"}\n'
-            * 10
-        )
+        snapshot_content = {
+            "version": 0,
+            "timestamp": "2024-01-01T00:00:00Z",
+            "manifest_list": "manifest-list-0.json",
+            "summary": {
+                "total_records": 1000,
+                "total_files": 1,
+                "column_stats": {"col1": {"min": 0, "max": 100, "null_count": 0}},
+            },
+        }
+        f.write(str(snapshot_content) * 5)  # Realistic JSON size
 
     with open(os.path.join(metadata_path, "manifest-list-0.json"), "w") as f:
-        f.write('{"manifests": ["manifest-0.json"]}\n' * 10)
+        manifest_list = {
+            "manifests": ["manifest-0.json"],
+            "schema_id": 0,
+            "created_at": "2024-01-01T00:00:00Z",
+        }
+        f.write(str(manifest_list) * 5)
 
     with open(os.path.join(manifest_path, "manifest-0.json"), "w") as f:
-        f.write('{"data_files": ["data-00000.parquet"], "row_count": 100}\n' * 10)
+        manifest = {
+            "data_files": ["data-00000.parquet"],
+            "row_count": 1000,
+            "column_stats": {"col1": {"min": 0, "max": 100, "null_count": 0}},
+            "created_at": "2024-01-01T00:00:00Z",
+        }
+        f.write(str(manifest) * 5)
 
     print(f"🔄 Simulating {num_updates} small updates...")
 
-    # Simulate small updates
+    # Simulate small updates with realistic file sizes
     for i in range(1, num_updates + 1):
-        # Each update creates:
-        # 1. New data file (even for single row)
+        # Each update creates new files with realistic sizes
+
+        # 1. New data file with parquet overhead
         with open(os.path.join(data_path, f"data-{i:05d}.parquet"), "w") as f:
-            f.write("PARQUET" * 20)  # Small 140-byte file
+            f.write("PAR1" * 50)  # File header
+            f.write("META" * 50)  # File metadata
+            f.write("DATA" * 100)  # Row group 1
+            f.write("DICT" * 25)  # Dictionary encoding
+            f.write("PAR1" * 50)  # File footer
 
-        # 2. New manifest file
+        # 2. New manifest file with detailed stats
         with open(os.path.join(manifest_path, f"manifest-{i}.json"), "w") as f:
-            manifest_content = (
-                f'{{"data_files": ["data-{i:05d}.parquet"], "row_count": 1}}\n'
-            )
-            f.write(manifest_content * 10)
+            manifest = {
+                "data_files": [f"data-{i:05d}.parquet"],
+                "row_count": 100,
+                "column_stats": {
+                    "col1": {"min": i, "max": i + 100, "null_count": 0},
+                    "col2": {"min": f"val_{i}", "max": f"val_{i+100}", "null_count": 0},
+                },
+                "created_at": datetime.now().isoformat(),
+            }
+            f.write(str(manifest) * 2)
 
-        # 3. New manifest list
+        # 3. New manifest list with cumulative stats
         with open(os.path.join(metadata_path, f"manifest-list-{i}.json"), "w") as f:
-            manifests = [f'"manifest-{j}.json"' for j in range(i + 1)]
-            manifest_list = f'{{"manifests": [{",".join(manifests)}]}}\n'
-            f.write(manifest_list * 10)
+            manifest_list = {
+                "manifests": [f"manifest-{j}.json" for j in range(i + 1)],
+                "schema_id": 0,
+                "created_at": datetime.now().isoformat(),
+                "statistics": {"record_count": (i + 1) * 100, "file_count": i + 1},
+            }
+            f.write(str(manifest_list) * 2)
 
-        # 4. New snapshot file
+        # 4. New snapshot file with table stats
         with open(os.path.join(snapshot_path, f"snapshot-v{i}.json"), "w") as f:
-            snapshot_content = f'{{"version": {i}, "timestamp": "{datetime.now()}", "manifest_list": "manifest-list-{i}.json"}}\n'
-            f.write(snapshot_content * 10)
+            snapshot = {
+                "version": i,
+                "timestamp": datetime.now().isoformat(),
+                "manifest_list": f"manifest-list-{i}.json",
+                "summary": {
+                    "total_records": (i + 1) * 100,
+                    "total_files": i + 1,
+                    "column_stats": {
+                        "col1": {"min": 0, "max": i + 100, "null_count": 0},
+                        "col2": {
+                            "min": "val_0",
+                            "max": f"val_{i+100}",
+                            "null_count": 0,
+                        },
+                    },
+                },
+            }
+            f.write(str(snapshot) * 2)
 
         if i % 20 == 0:
             print(f"   Processed {i} updates...")
@@ -114,6 +168,32 @@ def simulate_traditional_format(base_path, num_updates=100):
     print(f"   Total storage used: {format_size(total_size)}")
 
     return trad_path
+
+
+def get_ducklake_size(catalog_path):
+    """Calculate the total size of a DuckLake catalog including data files."""
+    base_path = catalog_path.replace("ducklake:", "")
+    total_size = 0
+
+    # Add catalog file size
+    if os.path.exists(base_path):
+        try:
+            total_size += os.path.getsize(base_path)
+        except (OSError, IOError):
+            pass
+
+    # Add data files size
+    data_files_path = base_path + ".files"
+    total_size += get_directory_size(data_files_path)
+
+    return total_size
+
+
+def calculate_improvement(traditional_size, ducklake_size):
+    """Calculate the percentage improvement (reduction) in size."""
+    if traditional_size == 0:
+        return 0
+    return ((traditional_size - ducklake_size) / traditional_size) * 100
 
 
 def simulate_ducklake_format(base_path, num_updates=100):
@@ -199,22 +279,34 @@ def simulate_ducklake_format(base_path, num_updates=100):
         ).fetchone()[0]
         print(f"   Snapshots created: {snapshots}")
 
-        # Calculate storage
+        # Calculate storage using the new method
+        total_size = get_ducklake_size(catalog_path)
         catalog_size = (
             os.path.getsize(catalog_path.replace("ducklake:", ""))
             if os.path.exists(catalog_path.replace("ducklake:", ""))
             else 0
         )
-        data_size = (
-            get_directory_size(data_files_path)
-            if os.path.exists(data_files_path)
-            else 0
-        )
-        total_size = catalog_size + data_size
+        data_size = total_size - catalog_size
 
         print(f"   Catalog size: {format_size(catalog_size)}")
         print(f"   Data files size: {format_size(data_size)}")
         print(f"   Total storage used: {format_size(total_size)}")
+
+        # Add debug information
+        print("\n   Debug Information:")
+        print(
+            f"   - Base path exists: {os.path.exists(catalog_path.replace('ducklake:', ''))}"
+        )
+        data_files_path = catalog_path.replace("ducklake:", "") + ".files"
+        print(f"   - Data files path exists: {os.path.exists(data_files_path)}")
+        if os.path.exists(data_files_path):
+            parquet_files = [
+                f for f in os.listdir(data_files_path) if f.endswith(".parquet")
+            ]
+            print(f"   - Number of parquet files: {len(parquet_files)}")
+            print(
+                f"   - Parquet files: {', '.join(parquet_files[:5])}{'...' if len(parquet_files) > 5 else ''}"
+            )
 
     return catalog_path.replace("ducklake:", "")
 
@@ -279,134 +371,161 @@ def demonstrate_inlining(base_path):
 def performance_comparison(base_path):
     """Compare performance between traditional and DuckLake formats."""
     print_section("Performance Comparison")
+    print("\n")
 
-    # Test with different update counts
     test_sizes = [10, 50, 100]
-
     results = []
 
-    for size in test_sizes:
-        print(f"\n🔬 Testing with {size} updates...")
+    print("🔬 Testing with different update counts...")
+
+    for num_updates in test_sizes:
+        test_dir = os.path.join(base_path, f"perf_test_{num_updates}")
+        os.makedirs(test_dir, exist_ok=True)
 
         # Traditional format
         trad_start = time.time()
-        trad_path = simulate_traditional_format(
-            os.path.join(base_path, f"perf_test_{size}"), size
-        )
+        trad_path = simulate_traditional_format(test_dir, num_updates)
         trad_time = time.time() - trad_start
-        trad_files = sum(1 for _ in os.walk(trad_path) for _ in _[2])
         trad_size = get_directory_size(trad_path)
+        trad_files = sum([len(files) for _, _, files in os.walk(trad_path)])
 
         # DuckLake format
         duck_start = time.time()
-        duck_path = simulate_ducklake_format(
-            os.path.join(base_path, f"perf_test_{size}"), size
-        )
+        duck_path = simulate_ducklake_format(test_dir, num_updates)
         duck_time = time.time() - duck_start
+        duck_size = get_ducklake_size(f"ducklake:{duck_path}")
+        duck_files = sum([len(files) for _, _, files in os.walk(duck_path + ".files")])
 
-        duck_files = 1  # Catalog file
-        data_files_path = duck_path + ".files"
-        if os.path.exists(data_files_path):
-            duck_files += len(os.listdir(data_files_path))
-
-        duck_size = os.path.getsize(duck_path) if os.path.exists(duck_path) else 0
-        if os.path.exists(data_files_path):
-            duck_size += get_directory_size(data_files_path)
+        # Calculate improvements
+        file_improvement = calculate_improvement(trad_files, duck_files)
+        size_improvement = calculate_improvement(trad_size, duck_size)
 
         results.append(
             {
-                "updates": size,
+                "updates": num_updates,
                 "trad_time": trad_time,
                 "trad_files": trad_files,
                 "trad_size": trad_size,
                 "duck_time": duck_time,
                 "duck_files": duck_files,
                 "duck_size": duck_size,
+                "file_improvement": file_improvement,
+                "size_improvement": size_improvement,
             }
         )
 
-        # Clean up test directories
-        shutil.rmtree(os.path.join(base_path, f"perf_test_{size}"), ignore_errors=True)
-
-    # Display results
+    # Print results table
     print("\n📊 Performance Comparison Results:")
     print("=" * 80)
-    print(f"{'Updates':<10} {'Traditional':<30} {'DuckLake':<30} {'Improvement':<20}")
     print(
-        f"{'':10} {'Time | Files | Size':<30} {'Time | Files | Size':<30} {'Files | Size':<20}"
+        "Updates    Traditional                    DuckLake                       Improvement         "
+    )
+    print(
+        "           Time | Files | Size            Time | Files | Size            Files | Size        "
     )
     print("-" * 80)
 
     for r in results:
-        trad_str = (
-            f"{r['trad_time']:.1f}s | {r['trad_files']} | {format_size(r['trad_size'])}"
+        print(
+            f"{r['updates']:<10} "
+            f"{r['trad_time']:.1f}s | {r['trad_files']} | {format_size(r['trad_size']):<14} "
+            f"{r['duck_time']:.1f}s | {r['duck_files']} | {format_size(r['duck_size']):<14} "
+            f"{r['file_improvement']:.0f}% | {r['size_improvement']:.0f}%"
         )
-        duck_str = (
-            f"{r['duck_time']:.1f}s | {r['duck_files']} | {format_size(r['duck_size'])}"
-        )
 
-        file_reduction = ((r["trad_files"] - r["duck_files"]) / r["trad_files"]) * 100
-        size_reduction = ((r["trad_size"] - r["duck_size"]) / r["trad_size"]) * 100
+    # Add detailed size breakdown for verification
+    print("\n📊 Detailed Size Breakdown:")
+    print("=" * 80)
+    for r in results:
+        print(f"\nTest with {r['updates']} updates:")
+        print(f"Traditional Format:")
+        print(f"  - Total size: {format_size(r['trad_size'])}")
+        print(f"  - Files: {r['trad_files']}")
+        print(f"DuckLake Format:")
+        print(f"  - Total size: {format_size(r['duck_size'])}")
+        print(f"  - Files: {r['duck_files']}")
+        print(f"Improvement:")
+        print(f"  - File count reduction: {r['file_improvement']:.1f}%")
+        print(f"  - Storage reduction: {r['size_improvement']:.1f}%")
 
-        improvement = f"{file_reduction:.0f}% | {size_reduction:.0f}%"
 
-        print(f"{r['updates']:<10} {trad_str:<30} {duck_str:<30} {improvement:<20}")
+def compare_formats(base_path):
+    """Compare the traditional and DuckLake formats."""
+    print_section("Comparison Summary")
+
+    # Get paths
+    trad_path = os.path.join(base_path, "traditional_format")
+    duck_path = os.path.join(base_path, "ducklake_format.ducklake")
+
+    # File count comparison
+    trad_files = sum([len(files) for _, _, files in os.walk(trad_path)])
+
+    duck_files = 1  # Catalog file
+    data_files_path = duck_path + ".files"
+    if os.path.exists(data_files_path):
+        duck_files += sum([len(files) for _, _, files in os.walk(data_files_path)])
+
+    print(f"📁 File Count:")
+    print(f"   Traditional Format: {trad_files} files")
+    print(f"   DuckLake Format: {duck_files} files")
+
+    file_improvement = calculate_improvement(trad_files, duck_files)
+    print(f"   Reduction: {file_improvement:.1f}%")
+
+    # Storage comparison
+    trad_size = get_directory_size(trad_path)
+    duck_size = get_ducklake_size(f"ducklake:{duck_path}")
+
+    print(f"\n💾 Storage Size:")
+    print(f"   Traditional Format: {format_size(trad_size)}")
+    print(f"   DuckLake Format: {format_size(duck_size)}")
+
+    size_improvement = calculate_improvement(trad_size, duck_size)
+    print(f"   Reduction: {size_improvement:.1f}%")
 
 
 def main():
     """Run the small file optimization demo."""
-    print_section("Demo 4: Small File Optimization", 80)
+    print_section("Demo 4: Small File Optimization")
+    print("\n")
 
-    # Create base directory for demo
+    # Create demo directory
     base_path = "small_file_demo"
     os.makedirs(base_path, exist_ok=True)
 
-    try:
-        # Run simulations
-        trad_path = simulate_traditional_format(base_path, 100)
-        duck_path = simulate_ducklake_format(base_path, 100)
+    # Add explanation of storage size considerations
+    print("Note on Storage Size Comparison:")
+    print("--------------------------------")
+    print(
+        "The storage size comparison in this demo shows the raw disk usage of both formats."
+    )
+    print("DuckLake's storage may appear larger due to:")
+    print("1. Additional metadata for time travel and versioning capabilities")
+    print("2. Parquet file overhead for small updates")
+    print("3. Maintenance of a complete catalog for ACID guarantees")
+    print("The trade-off is between storage size and these advanced features.")
+    print(
+        "In real-world scenarios with larger data volumes, these overheads become negligible."
+    )
+    print("\n")
 
-        # Compare results
-        print_section("Comparison Summary")
+    # Run comparisons
+    simulate_traditional_format(base_path)
+    simulate_ducklake_format(base_path)
+    compare_formats(base_path)
+    demonstrate_inlining(base_path)
+    performance_comparison(base_path)
 
-        # File count comparison
-        trad_files = sum(1 for _ in os.walk(trad_path) for _ in _[2])
-
-        duck_files = 1  # Catalog
-        data_files_path = duck_path + ".files"
-        if os.path.exists(data_files_path):
-            duck_files += len(os.listdir(data_files_path))
-
-        print(f"📁 File Count:")
-        print(f"   Traditional Format: {trad_files} files")
-        print(f"   DuckLake Format: {duck_files} files")
-        print(f"   Reduction: {((trad_files - duck_files) / trad_files * 100):.1f}%")
-
-        # Storage comparison
-        trad_size = get_directory_size(trad_path)
-        duck_size = os.path.getsize(duck_path) if os.path.exists(duck_path) else 0
-        if os.path.exists(data_files_path):
-            duck_size += get_directory_size(data_files_path)
-
-        print(f"\n💾 Storage Size:")
-        print(f"   Traditional Format: {format_size(trad_size)}")
-        print(f"   DuckLake Format: {format_size(duck_size)}")
-        print(f"   Reduction: {((trad_size - duck_size) / trad_size * 100):.1f}%")
-
-        # Demonstrate inlining
-        demonstrate_inlining(base_path)
-
-        # Performance comparison
-        performance_comparison(base_path)
-
-    finally:
-        # Clean up
-        print("\n🧹 Cleaning up demo files...")
-        shutil.rmtree(base_path, ignore_errors=True)
+    # Clean up
+    print("\n🧹 Cleaning up demo files...")
+    shutil.rmtree(base_path, ignore_errors=True)
 
     print("\n✅ Demo completed!")
     print(
-        "\n💡 Key Takeaway: DuckLake dramatically reduces file count and storage overhead for frequent small updates!"
+        "\n💡 Key Takeaway: While DuckLake may use more storage for very small datasets due to feature overhead,"
+    )
+    print(
+        "   it provides significant benefits in terms of data management, versioning, and ACID guarantees."
     )
 
 
