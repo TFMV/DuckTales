@@ -147,15 +147,51 @@ DuckTales/
 │   └── 05_catalog_portability/
 │       ├── demo.py
 │       └── demo.sh
+├── exploration/              # Advanced analysis scripts
+│   ├── ducklake_analysis.sh  # Comprehensive DuckLake behavior analysis
+│   ├── schema_analysis.sh    # Catalog schema and metadata analysis
+│   ├── benchmark_ducklake.sh # Performance benchmarking
+│   └── run_all_analysis.sh   # Run all analysis scripts
 ├── data/                     # Test data
 │   └── parquet/
 │       ├── flights/
 │       ├── lineitem/
 │       └── customer/
-└── art/                      # Article and documentation
-    ├── article.md
-    └── ducklake.txt
 ```
+
+### 🔬 Analysis Tools
+
+The `exploration` directory contains a suite of analysis tools for understanding DuckLake's behavior and performance:
+
+#### Analysis Scripts
+
+- **ducklake_analysis.sh**: Comprehensive analysis of DuckLake's behavior, including:
+  - Metadata operations tracking
+  - File system state monitoring
+  - Time travel capabilities
+  - Catalog introspection
+
+- **schema_analysis.sh**: Deep dive into DuckLake's catalog structure:
+  - Schema evolution tracking
+  - Metadata table relationships
+  - System function analysis
+  - Catalog backend compatibility
+
+- **benchmark_ducklake.sh**: Performance benchmarking suite:
+  - Transaction throughput
+  - Storage efficiency
+  - Metadata operation latency
+  - Comparison with traditional formats
+
+#### Running Analysis Tools
+
+```bash
+cd exploration
+chmod +x run_all_analysis.sh
+./run_all_analysis.sh
+```
+
+Analysis results are stored in the `notes/ducklake_results` directory, with detailed traces in `notes/ducklake_traces`.
 
 ## 🔍 Key Concepts
 
