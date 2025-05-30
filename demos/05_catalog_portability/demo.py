@@ -90,12 +90,12 @@ def local_development_phase():
         conn.execute(
             """
             CREATE TABLE products (
-                id INTEGER PRIMARY KEY,
+                id INTEGER,
                 name VARCHAR,
                 category VARCHAR,
                 price DECIMAL(10, 2),
                 in_stock BOOLEAN,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP
             )
         """
         )
@@ -103,12 +103,12 @@ def local_development_phase():
         # Insert sample data
         conn.execute(
             """
-            INSERT INTO products (id, name, category, price, in_stock) VALUES 
-                (1, 'DuckDB T-Shirt', 'Apparel', 29.99, true),
-                (2, 'DuckDB Mug', 'Accessories', 14.99, true),
-                (3, 'DuckDB Sticker Pack', 'Accessories', 4.99, true),
-                (4, 'DuckDB Hoodie', 'Apparel', 59.99, false),
-                (5, 'DuckDB Cap', 'Apparel', 24.99, true)
+            INSERT INTO products VALUES 
+                (1, 'DuckDB T-Shirt', 'Apparel', 29.99, true, CURRENT_TIMESTAMP),
+                (2, 'DuckDB Mug', 'Accessories', 14.99, true, CURRENT_TIMESTAMP),
+                (3, 'DuckDB Sticker Pack', 'Accessories', 4.99, true, CURRENT_TIMESTAMP),
+                (4, 'DuckDB Hoodie', 'Apparel', 59.99, false, CURRENT_TIMESTAMP),
+                (5, 'DuckDB Cap', 'Apparel', 24.99, true, CURRENT_TIMESTAMP)
         """
         )
 
@@ -116,10 +116,10 @@ def local_development_phase():
         conn.execute(
             """
             CREATE TABLE orders (
-                order_id INTEGER PRIMARY KEY,
+                order_id INTEGER,
                 product_id INTEGER,
                 quantity INTEGER,
-                order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                order_date TIMESTAMP,
                 customer_email VARCHAR
             )
         """
@@ -128,10 +128,10 @@ def local_development_phase():
         # Insert some orders
         conn.execute(
             """
-            INSERT INTO orders (order_id, product_id, quantity, customer_email) VALUES 
-                (1, 1, 2, 'alice@example.com'),
-                (2, 2, 1, 'bob@example.com'),
-                (3, 3, 5, 'charlie@example.com')
+            INSERT INTO orders VALUES 
+                (1, 1, 2, CURRENT_TIMESTAMP, 'alice@example.com'),
+                (2, 2, 1, CURRENT_TIMESTAMP, 'bob@example.com'),
+                (3, 3, 5, CURRENT_TIMESTAMP, 'charlie@example.com')
         """
         )
 

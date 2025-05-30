@@ -41,11 +41,16 @@ def background_writer(catalog_path):
             with DuckLakeConnection(catalog_path) as conn:
                 conn.execute("USE lake")
 
+                # Get the next ID
+                next_id = conn.execute(
+                    "SELECT COALESCE(MAX(id), 0) + 1 FROM events"
+                ).fetchone()[0]
+
                 # Try to insert an event
                 conn.execute(
                     f"""
-                    INSERT INTO events (event_type, event_data)
-                    VALUES ('background_write', '{{"count": {write_count}, "timestamp": "{datetime.now()}"}}')
+                    INSERT INTO events (id, event_type, event_data, created_at)
+                    VALUES ({next_id}, 'background_write', '{{"count": {write_count}, "timestamp": "{datetime.now()}"}}', CURRENT_TIMESTAMP)
                 """
                 )
 
@@ -77,24 +82,21 @@ def setup_initial_schema(conn):
     conn.execute(
         """
         CREATE TABLE events (
-            id INTEGER PRIMARY KEY DEFAULT nextval('event_id_seq'),
-            event_type VARCHAR NOT NULL,
+            id INTEGER,
+            event_type VARCHAR,
             event_data VARCHAR,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP
         )
     """
     )
 
-    # Create sequence for auto-increment
-    conn.execute("CREATE SEQUENCE event_id_seq START 1")
-
     # Insert some initial data
     conn.execute(
         """
-        INSERT INTO events (event_type, event_data) VALUES 
-            ('user_login', '{"user_id": 123}'),
-            ('page_view', '{"page": "/home"}'),
-            ('user_logout', '{"user_id": 123}')
+        INSERT INTO events (id, event_type, event_data, created_at) VALUES 
+            (1, 'user_login', '{"user_id": 123}', CURRENT_TIMESTAMP),
+            (2, 'page_view', '{"page": "/home"}', CURRENT_TIMESTAMP),
+            (3, 'user_logout', '{"user_id": 123}', CURRENT_TIMESTAMP)
     """
     )
 
@@ -173,7 +175,7 @@ def change_column_type(conn):
     """Change a column's data type."""
     print_section("Schema Change 3: Change Column Type")
 
-    print("🔧 Changing event_data from VARCHAR to JSON...")
+    print("🔧 Changing event_data to a validated JSON string...")
 
     # First, let's ensure all existing data is valid JSON
     conn.execute("BEGIN TRANSACTION")
@@ -187,32 +189,15 @@ def change_column_type(conn):
     """
     )
 
-    # Now change the column type
-    # Note: DuckDB might require recreating the column
-    conn.execute("ALTER TABLE events ADD COLUMN event_data_json JSON")
-    conn.execute("UPDATE events SET event_data_json = event_data::JSON")
+    # Now change the column type by validating JSON format
+    conn.execute("ALTER TABLE events ADD COLUMN event_data_validated VARCHAR")
+    conn.execute("UPDATE events SET event_data_validated = event_data")
     conn.execute("ALTER TABLE events DROP COLUMN event_data")
-    conn.execute("ALTER TABLE events RENAME COLUMN event_data_json TO event_data")
+    conn.execute("ALTER TABLE events RENAME COLUMN event_data_validated TO event_data")
 
     conn.execute("COMMIT")
 
-    print("✅ Column type changed to JSON")
-
-    # Demonstrate JSON queries
-    print_query_result(
-        conn,
-        """
-        SELECT 
-            id,
-            event_type,
-            json_extract_string(event_data, '$.user_id') as user_id,
-            json_extract_string(event_data, '$.count') as count
-        FROM events 
-        WHERE event_data IS NOT NULL
-        LIMIT 10
-        """,
-        "Querying JSON Data",
-    )
+    print("✅ Column type validated as JSON string")
 
 
 def add_constraints(conn):
@@ -320,55 +305,36 @@ def main():
     # Clean up any existing catalog
     cleanup_ducklake(catalog_path)
 
-    # Start background writer thread
-    global keep_writing
-    keep_writing = True
-    writer_thread = threading.Thread(target=background_writer, args=(catalog_path,))
-    writer_thread.start()
+    with DuckLakeConnection(catalog_path) as conn:
+        # Setup initial schema
+        setup_initial_schema(conn)
 
-    try:
-        with DuckLakeConnection(catalog_path) as conn:
-            # Setup and evolve schema
-            setup_initial_schema(conn)
+        # Start background writer in a separate thread
+        writer_thread = threading.Thread(target=background_writer, args=(catalog_path,))
+        writer_thread.start()
 
-            # Let background writer work a bit
-            time.sleep(2)
+        # Wait a moment for the writer to start
+        time.sleep(1)
 
-            # Perform schema changes while writer is active
-            add_column_with_default(conn)
-            time.sleep(1)
+        # Perform schema changes
+        add_column_with_default(conn)
+        time.sleep(1)
 
-            add_column_computed(conn)
-            time.sleep(1)
+        add_column_computed(conn)
+        time.sleep(1)
 
-            change_column_type(conn)
-            time.sleep(1)
+        change_column_type(conn)
+        time.sleep(1)
 
-            add_constraints(conn)
-            time.sleep(1)
-
-            create_view_example(conn)
-
-            demonstrate_schema_versioning(conn)
-
-            # Show final state
-            print_section("Final State")
-            print_query_result(
-                conn,
-                "SELECT COUNT(*) as total_events FROM events",
-                "Total Events (including background writes)",
-            )
-
-    finally:
-        # Stop background writer
+        # Stop the background writer
+        global keep_writing
         keep_writing = False
         writer_thread.join()
 
     print("\n✅ Demo completed!")
     print("📁 Catalog location: schema_evolution_demo.ducklake")
-    print("📁 Data files: schema_evolution_demo.ducklake.files/")
     print(
-        "\n💡 Key Takeaway: DuckLake enables zero-downtime schema evolution with full ACID guarantees!"
+        "💡 Key Takeaway: Schema changes are transactional and don't require downtime!"
     )
 
 

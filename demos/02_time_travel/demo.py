@@ -36,11 +36,11 @@ def setup_customer_data(conn):
     conn.execute(
         """
         CREATE TABLE customers (
-            id INTEGER PRIMARY KEY,
+            id INTEGER,
             name VARCHAR,
             email VARCHAR,
             phone VARCHAR,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP,
             last_order_date DATE,
             total_spent DECIMAL(10, 2)
         )
@@ -62,6 +62,7 @@ def setup_customer_data(conn):
     print("✅ Customer table created with 5 customers")
 
     # Take a snapshot after initial load
+    conn.execute("BEGIN TRANSACTION")
     conn.execute("COMMIT")
 
 
@@ -90,6 +91,7 @@ def simulate_normal_operations(conn):
 
     for sql, description in operations:
         print(f"📝 {description}")
+        conn.execute("BEGIN TRANSACTION")
         conn.execute(sql)
         conn.execute("COMMIT")  # Create a snapshot for each operation
         time.sleep(0.5)  # Small delay to show time progression
@@ -106,6 +108,7 @@ def simulate_accidental_deletion(conn):
     print("   But they forgot the WHERE clause...")
 
     # Simulate the accident
+    conn.execute("BEGIN TRANSACTION")
     conn.execute("DELETE FROM customers")  # Oops! No WHERE clause
     conn.execute("COMMIT")
 
@@ -219,10 +222,10 @@ def recover_deleted_data(conn, good_snapshot):
     print(f"🔄 Recovering data from snapshot {good_snapshot}...")
 
     # Count records before recovery
-    before_count = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
-    print(f"   Records before recovery: {before_count}")
+    current_count = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+    print(f"   Records before recovery: {current_count}")
 
-    # Recover the data
+    conn.execute("BEGIN TRANSACTION")
     conn.execute(
         f"""
         INSERT INTO customers 
@@ -234,7 +237,7 @@ def recover_deleted_data(conn, good_snapshot):
     # Count records after recovery
     after_count = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
     print(f"   Records after recovery: {after_count}")
-    print(f"   Recovered records: {after_count - before_count}")
+    print(f"   Recovered records: {after_count - current_count}")
 
     print("\n✅ Data successfully recovered!")
     print_query_result(
@@ -246,35 +249,45 @@ def demonstrate_advanced_time_travel(conn):
     """Show advanced time travel features."""
     print_section("Advanced Time Travel Features")
 
-    # Create audit log using time travel
     print("📋 Creating audit log of all changes to customer emails:")
 
+    # Get all snapshots
     snapshots = conn.execute(
         """
         SELECT snapshot_id 
-        FROM ducklake_snapshots('lake') 
+        FROM ducklake_snapshots('lake')
+        WHERE snapshot_id > 1
         ORDER BY snapshot_id
-    """
+        """
     ).fetchall()
 
+    # Track email changes across snapshots
     email_changes = []
-
     for i in range(1, len(snapshots)):
         prev_snap = snapshots[i - 1][0]
         curr_snap = snapshots[i][0]
 
-        # Find email changes between snapshots
+        # Compare emails between snapshots
         changes = conn.execute(
             f"""
+            WITH prev_state AS (
+                SELECT id, name, email 
+                FROM main.customers AT (VERSION => {prev_snap})
+            ),
+            curr_state AS (
+                SELECT id, name, email 
+                FROM main.customers AT (VERSION => {curr_snap})
+            )
             SELECT 
-                c2.id,
-                c1.email as old_email,
-                c2.email as new_email,
-                '{curr_snap}' as snapshot_id
-            FROM customers AT (VERSION => {prev_snap}) c1
-            JOIN customers AT (VERSION => {curr_snap}) c2 ON c1.id = c2.id
-            WHERE c1.email != c2.email
-        """
+                curr_state.id,
+                curr_state.name,
+                prev_state.email as old_email,
+                curr_state.email as new_email,
+                {curr_snap} as snapshot_id
+            FROM prev_state
+            JOIN curr_state ON prev_state.id = curr_state.id
+            WHERE prev_state.email != curr_state.email
+            """
         ).fetchall()
 
         email_changes.extend(changes)
@@ -283,10 +296,12 @@ def demonstrate_advanced_time_travel(conn):
         print("\n📧 Email change history:")
         for change in email_changes:
             print(
-                f"   Customer {change[0]}: {change[1]} → {change[2]} (snapshot {change[3]})"
+                f"   Customer {change[0]} ({change[1]}): {change[2]} → {change[3]} (snapshot {change[4]})"
             )
     else:
-        print("   No email changes detected")
+        print("   No email changes found in history")
+
+    print("\n✅ Advanced time travel demo completed!")
 
 
 def main():

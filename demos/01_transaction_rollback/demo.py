@@ -33,7 +33,7 @@ def setup_tables(conn):
     conn.execute(
         """
         CREATE TABLE inventory (
-            product_id INTEGER PRIMARY KEY,
+            product_id INTEGER,
             product_name VARCHAR,
             quantity INTEGER,
             price DECIMAL(10, 2)
@@ -45,11 +45,11 @@ def setup_tables(conn):
     conn.execute(
         """
         CREATE TABLE orders (
-            order_id INTEGER PRIMARY KEY,
+            order_id INTEGER,
             product_id INTEGER,
             quantity INTEGER,
             customer_name VARCHAR,
-            order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            order_date TIMESTAMP
         )
     """
     )
@@ -232,22 +232,13 @@ def demo_time_travel_after_transactions(conn):
     # Query inventory at different versions
     print("\n🕐 Inventory at different points in time:")
 
-    versions = conn.execute(
-        """
-        SELECT DISTINCT snapshot_id 
-        FROM ducklake_snapshots('lake') 
-        ORDER BY snapshot_id
-        LIMIT 4
-    """
-    ).fetchall()
-
-    for version in versions:
-        version_id = version[0]
+    # Show inventory at different versions
+    for version_id in range(1, 7):
         print(f"\n📌 Version {version_id}:")
         result = conn.execute(
             f"""
-            SELECT product_name, quantity 
-            FROM inventory AT (VERSION => {version_id})
+            SELECT * 
+            FROM main.inventory AT (VERSION => {version_id})
             ORDER BY product_id
         """
         ).fetchall()
