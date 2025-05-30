@@ -49,19 +49,20 @@ def simulate_traditional_format(base_path, num_updates=100):
 
     # Simulate initial data file
     with open(os.path.join(data_path, "data-00000.parquet"), "w") as f:
-        f.write("PARQUET" + "0" * 1000)  # Simulate 1KB parquet file
+        f.write("PARQUET" * 200)  # Simulate 1.4KB parquet file
 
     # Simulate metadata files for initial state
     with open(os.path.join(snapshot_path, "snapshot-v0.json"), "w") as f:
         f.write(
-            '{"version": 0, "timestamp": "2024-01-01", "manifest_list": "manifest-list-0.json"}'
+            '{"version": 0, "timestamp": "2024-01-01", "manifest_list": "manifest-list-0.json"}\n'
+            * 10
         )
 
     with open(os.path.join(metadata_path, "manifest-list-0.json"), "w") as f:
-        f.write('{"manifests": ["manifest-0.json"]}')
+        f.write('{"manifests": ["manifest-0.json"]}\n' * 10)
 
     with open(os.path.join(manifest_path, "manifest-0.json"), "w") as f:
-        f.write('{"data_files": ["data-00000.parquet"], "row_count": 100}')
+        f.write('{"data_files": ["data-00000.parquet"], "row_count": 100}\n' * 10)
 
     print(f"🔄 Simulating {num_updates} small updates...")
 
@@ -70,22 +71,25 @@ def simulate_traditional_format(base_path, num_updates=100):
         # Each update creates:
         # 1. New data file (even for single row)
         with open(os.path.join(data_path, f"data-{i:05d}.parquet"), "w") as f:
-            f.write("PARQUET" + "0" * 100)  # Small 100-byte file
+            f.write("PARQUET" * 20)  # Small 140-byte file
 
         # 2. New manifest file
         with open(os.path.join(manifest_path, f"manifest-{i}.json"), "w") as f:
-            f.write(f'{{"data_files": ["data-{i:05d}.parquet"], "row_count": 1}}')
+            manifest_content = (
+                f'{{"data_files": ["data-{i:05d}.parquet"], "row_count": 1}}\n'
+            )
+            f.write(manifest_content * 10)
 
         # 3. New manifest list
         with open(os.path.join(metadata_path, f"manifest-list-{i}.json"), "w") as f:
             manifests = [f'"manifest-{j}.json"' for j in range(i + 1)]
-            f.write(f'{{"manifests": [{",".join(manifests)}]}}')
+            manifest_list = f'{{"manifests": [{",".join(manifests)}]}}\n'
+            f.write(manifest_list * 10)
 
         # 4. New snapshot file
         with open(os.path.join(snapshot_path, f"snapshot-v{i}.json"), "w") as f:
-            f.write(
-                f'{{"version": {i}, "timestamp": "{datetime.now()}", "manifest_list": "manifest-list-{i}.json"}}'
-            )
+            snapshot_content = f'{{"version": {i}, "timestamp": "{datetime.now()}", "manifest_list": "manifest-list-{i}.json"}}\n'
+            f.write(snapshot_content * 10)
 
         if i % 20 == 0:
             print(f"   Processed {i} updates...")
@@ -216,10 +220,10 @@ def simulate_ducklake_format(base_path, num_updates=100):
 
 
 def demonstrate_inlining(base_path):
-    """Demonstrate DuckLake's ability to inline small changes."""
+    """Demonstrate DuckLake's inlining feature."""
     print_section("DuckLake Inlining Feature")
 
-    catalog_path = f"ducklake:{os.path.join(base_path, 'ducklake_inline.ducklake')}"
+    catalog_path = f"ducklake:{os.path.join(base_path, 'inlining_demo.ducklake')}"
 
     # Clean up any existing catalog
     cleanup_ducklake(catalog_path)
@@ -227,41 +231,49 @@ def demonstrate_inlining(base_path):
     with DuckLakeConnection(catalog_path) as conn:
         conn.execute("USE lake")
 
-        # Create a table for demonstrating inlining
+        # Create a table with small rows
         conn.execute(
             """
-            CREATE TABLE events_inline (
+            CREATE TABLE small_rows (
                 id INTEGER,
-                event_type VARCHAR,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                name VARCHAR,
+                value INTEGER,
+                created_at TIMESTAMP
             )
         """
         )
 
-        print("📝 Inserting many small records that can be inlined...")
-
-        # Insert many small records
-        for i in range(50):
+        # Insert small rows
+        print("🔄 Inserting small rows...")
+        for i in range(100):
             conn.execute(
                 f"""
-                INSERT INTO events_inline VALUES 
-                ({i}, 'event_type_{i % 5}', CURRENT_TIMESTAMP)
+                INSERT INTO small_rows (id, name, value, created_at)
+                VALUES ({i}, 'item_{i}', {i * 10}, CURRENT_TIMESTAMP)
             """
             )
 
-        # Check file creation
-        data_files_path = catalog_path.replace("ducklake:", "") + ".files"
+        # Show statistics
+        row_count = conn.execute("SELECT COUNT(*) FROM small_rows").fetchone()[0]
+        print(f"\n📊 Table Statistics:")
+        print(f"   Total rows: {row_count}")
 
-        if os.path.exists(data_files_path):
-            files = os.listdir(data_files_path)
-            print(f"\n✅ Files created: {len(files)}")
-            print("   (DuckLake can inline small changes to avoid creating many files)")
-        else:
-            print("\n✅ No data files created - all changes inlined in catalog!")
+        # Show storage efficiency
+        catalog_size = os.path.getsize(catalog_path.replace("ducklake:", ""))
+        data_files_size = get_directory_size(
+            catalog_path.replace("ducklake:", "") + ".files"
+        )
+        total_size = catalog_size + data_files_size
 
-        # Show the data is still queryable
-        count = conn.execute("SELECT COUNT(*) FROM events_inline").fetchone()[0]
-        print(f"   Total records: {count}")
+        print("\n💾 Storage Usage:")
+        print(f"   Catalog size: {format_size(catalog_size)}")
+        print(f"   Data files size: {format_size(data_files_size)}")
+        print(f"   Total size: {format_size(total_size)}")
+
+        # Show average row size
+        if row_count > 0:
+            avg_row_size = total_size / row_count
+            print(f"   Average bytes per row: {avg_row_size:.1f}")
 
 
 def performance_comparison(base_path):

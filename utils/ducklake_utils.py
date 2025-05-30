@@ -163,12 +163,13 @@ def format_size(bytes: int) -> str:
 
 
 def get_directory_size(path: str) -> int:
-    """Get total size of all files in a directory."""
+    """Get total size of all files in a directory and its subdirectories."""
     total = 0
     if os.path.exists(path):
-        for entry in os.scandir(path):
-            if entry.is_file():
-                total += entry.stat().st_size
+        for dirpath, dirnames, filenames in os.walk(path):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                total += os.path.getsize(filepath)
     return total
 
 
