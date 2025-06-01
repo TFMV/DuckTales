@@ -6,7 +6,7 @@
 
 DuckTales is a comprehensive demonstration suite for **DuckLake**, DuckDB's revolutionary lakehouse format that simplifies data management by using SQL databases for metadata instead of complex file-based systems.
 
-This project showcases the five key scenarios from the article "Rethinking the Lakehouse with a Duck and a Plan", demonstrating how DuckLake solves real-world problems that traditional lakehouse formats struggle with.
+This project showcases the five key scenarios from the article "[DuckTales: Rethinking the Lakehouse with a Duck and a Plan](https://medium.com/@mcgeehan/ducktales-a-ducklake-story-3b4d4e400578)", demonstrating how DuckLake solves real-world problems that traditional lakehouse formats struggle with.
 
 ## ✨ What is DuckLake?
 
